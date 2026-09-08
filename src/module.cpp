@@ -9,6 +9,7 @@
 #include <string>
 
 #include "niri_ipc.hpp"
+#include "workspaces.hpp"
 #include "waybar_cffi_module.h"
 
 namespace {
@@ -55,11 +56,11 @@ class Module {
 
   void update() {
     syncOrientation();
-    const std::string output = focusedOutput();
+    const std::string output = state_.focusedOutput();
 
     for (auto it = buttons_.begin(); it != buttons_.end();) {
-      const auto workspace = workspaces_.find(it->first);
-      if (workspace == workspaces_.end() || workspace->second["output"].asString() != output) {
+      const auto workspace = state_.all().find(it->first);
+      if (workspace == state_.all().end() || workspace->second["output"].asString() != output) {
         gtk_widget_destroy(GTK_WIDGET(it->second));
         it = buttons_.erase(it);
       } else {
@@ -67,7 +68,7 @@ class Module {
       }
     }
 
-    for (const auto& [id, workspace] : workspaces_) {
+    for (const auto& [id, workspace] : state_.all()) {
       if (workspace["output"].asString() != output) {
         continue;
       }
@@ -79,59 +80,9 @@ class Module {
 
  private:
   void onEvent(const Json::Value& event) {
-    if (event.isMember("WorkspacesChanged")) {
-      workspaces_.clear();
-      for (const auto& workspace : event["WorkspacesChanged"]["workspaces"]) {
-        workspaces_[workspace["id"].asUInt64()] = workspace;
-      }
-    } else if (event.isMember("WorkspaceActivated")) {
-      activate(event["WorkspaceActivated"]);
-    } else if (event.isMember("WorkspaceUrgencyChanged")) {
-      const auto& data = event["WorkspaceUrgencyChanged"];
-      if (auto it = workspaces_.find(data["id"].asUInt64()); it != workspaces_.end()) {
-        it->second["is_urgent"] = data["urgent"];
-      }
-    } else if (event.isMember("WorkspaceActiveWindowChanged")) {
-      const auto& data = event["WorkspaceActiveWindowChanged"];
-      if (auto it = workspaces_.find(data["workspace_id"].asUInt64()); it != workspaces_.end()) {
-        it->second["active_window_id"] = data["active_window_id"];
-      }
-    } else {
-      return;
+    if (state_.apply(event)) {
+      queue_update_(waybar_);
     }
-    queue_update_(waybar_);
-  }
-
-  void activate(const Json::Value& data) {
-    const auto activated = workspaces_.find(data["id"].asUInt64());
-    if (activated == workspaces_.end()) {
-      return;
-    }
-    const std::string output = activated->second["output"].asString();
-    const bool focused = data["focused"].asBool();
-
-    for (auto& [id, workspace] : workspaces_) {
-      if (workspace["output"].asString() == output) {
-        workspace["is_active"] = false;
-      }
-      if (focused) {
-        workspace["is_focused"] = false;
-      }
-    }
-    activated->second["is_active"] = true;
-    activated->second["is_focused"] = focused;
-  }
-
-  /// The output holding focus, falling back to the last known one so the bar
-  /// never blanks while niri reports a transient focus-less state.
-  std::string focusedOutput() {
-    for (const auto& [id, workspace] : workspaces_) {
-      if (workspace["is_focused"].asBool()) {
-        focused_output_ = workspace["output"].asString();
-        break;
-      }
-    }
-    return focused_output_;
   }
 
   GtkButton* syncButton(std::uint64_t id, const Json::Value& workspace) {
@@ -237,8 +188,7 @@ class Module {
   void (*queue_update_)(wbcffi_module*);
   Json::Value config_;
   GtkBox* box_{nullptr};
-  std::string focused_output_;
-  std::map<std::uint64_t, Json::Value> workspaces_;
+  niri::Workspaces state_;
   std::map<std::uint64_t, GtkButton*> buttons_;
   std::unique_ptr<niri::EventStream> stream_;
 };

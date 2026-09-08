@@ -74,6 +74,9 @@ EventStream::EventStream(Handler on_event) : on_event_(std::move(on_event)) {
 
   channel_ = g_io_channel_unix_new(fd);
   g_io_channel_set_close_on_unref(channel_, TRUE);
+  // Without this the read loop blocks the GTK main loop once it drains the
+  // buffered events, and the whole bar stops painting.
+  g_io_channel_set_flags(channel_, G_IO_FLAG_NONBLOCK, nullptr);
   watch_ = g_io_add_watch(channel_, static_cast<GIOCondition>(G_IO_IN | G_IO_HUP | G_IO_ERR),
                           &EventStream::onReadable, this);
 }

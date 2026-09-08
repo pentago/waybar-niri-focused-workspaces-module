@@ -12,12 +12,23 @@ fmt = dependency('fmt')
 
 module = shared_library(
     'niri-focused-workspaces',
-    ['src/module.cpp', 'src/niri_ipc.cpp'],
+    ['src/module.cpp', 'src/niri_ipc.cpp', 'src/workspaces.cpp'],
     include_directories: include_directories('include'),
     dependencies: [gtk, jsoncpp, fmt],
     name_prefix: '',
     install: true,
     install_dir: get_option('libdir') / 'waybar',
+)
+
+test(
+    'workspaces',
+    executable(
+        'workspaces_test',
+        ['test/workspaces_test.cpp', 'src/workspaces.cpp'],
+        include_directories: include_directories('src'),
+        dependencies: [jsoncpp],
+        cpp_args: ['-UNDEBUG'],
+    ),
 )
 
 scdoc = find_program('scdoc', required: get_option('man-pages'))
