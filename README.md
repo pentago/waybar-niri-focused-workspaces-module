@@ -12,9 +12,10 @@ across external monitors, that bar is stuck showing the laptop's workspaces.
 This module is the equivalent of DankMaterialShell's `workspaceFollowFocus`
 setting: the workspace row follows your focus across monitors.
 
-It is a plain shared library loaded through Waybar's
+It is a plain Rust `cdylib` loaded through Waybar's
 [CFFI ABI](https://github.com/Alexays/Waybar/wiki/Module:-CFFI) — **no patched
-Waybar required**, it works with the stock `waybar` package.
+Waybar required**, it works with the stock `waybar` package. Dependencies are
+`serde_json` plus the raw `*-sys` GTK3 bindings; no safe-wrapper crates.
 
 ## Styling
 
@@ -41,12 +42,12 @@ From the AUR:
 paru -S waybar-niri-focused-workspaces
 ```
 
-From source:
+From source (installs to `/usr/local`, override with `PREFIX=`):
 
 ```bash
-meson setup build
-meson compile -C build
-sudo meson install -C build
+make
+sudo make install     # /usr/local/bin/niri-focused-workspaces.so
+sudo make uninstall
 ```
 
 ## Configure
@@ -55,14 +56,19 @@ sudo meson install -C build
 {
   "modules-left": ["cffi/workspaces"],
   "cffi/workspaces": {
-    "module_path": "/usr/lib/waybar/niri-focused-workspaces.so",
+    "module_path": "/usr/local/bin/niri-focused-workspaces.so",
     "format": "{index}"
   }
 }
 ```
 
+The AUR package installs to `/usr/bin/niri-focused-workspaces.so` instead —
+pacman packages may not write to `/usr/local`.
+
 Options: `format`, `format-icons`, `disable-click`, `disable-markup` — same
-semantics as `niri/workspaces`. See `man 5 waybar-niri-focused-workspaces`.
+semantics as `niri/workspaces`, except that `format` substitutes placeholders
+literally and does not support format specs. See
+`man 5 waybar-niri-focused-workspaces`.
 
 `all-outputs` and `current-only` are deliberately absent: both are meaningless
 once the module always tracks a single, focused output.
@@ -71,7 +77,7 @@ once the module always tracks a single, focused output.
 
 `aur/PKGBUILD` builds from a GitHub release tarball. To cut a release:
 
-1. Bump `version` in `meson.build` and `pkgver` in `aur/PKGBUILD`.
+1. Bump `version` in `Cargo.toml` and `pkgver` in `aur/PKGBUILD`.
 2. Tag `vX.Y.Z` and push; GitHub serves the tarball.
 3. Replace `sha256sums=('SKIP')` with the real sum (`updpkgsums` in `aur/`).
 4. Regenerate `aur/.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO`).
@@ -80,5 +86,4 @@ once the module always tracks a single, focused output.
 
 ## License
 
-MIT. `include/waybar_cffi_module.h` is vendored from Waybar, also MIT — see
-`LICENSE.waybar`.
+MIT.

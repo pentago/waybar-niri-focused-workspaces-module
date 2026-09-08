@@ -7,31 +7,35 @@ pkgdesc='Waybar module showing the niri workspaces of the focused output on ever
 arch=('x86_64')
 url='https://github.com/pentago/aur-waybar-niri-focused-workspaces'
 license=('MIT')
-depends=(
-    'fmt'
-    'gcc-libs'
-    'glib2'
-    'glibc'
-    'gtk3'
-    'jsoncpp'
-)
-makedepends=('meson' 'scdoc')
+depends=('gcc-libs' 'glib2' 'glibc' 'gtk3')
+makedepends=('cargo' 'scdoc')
 optdepends=('niri: the compositor this module talks to')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
+prepare() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
 build() {
-    arch-meson "$pkgname-$pkgver" build
-    meson compile -C build
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release
+    make man/waybar-niri-focused-workspaces.5
 }
 
 check() {
-    meson test -C build --print-errorlogs
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --release
 }
 
 package() {
-    depends+=('libfmt.so' 'libjsoncpp.so')
-
-    meson install -C build --destdir "$pkgdir"
-    install -Dm644 "$pkgname-$pkgver/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/"
+    cd "$pkgname-$pkgver"
+    # /usr/local belongs to the local admin; packages must stay under /usr.
+    make PREFIX=/usr DESTDIR="$pkgdir" install
+    install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
 }

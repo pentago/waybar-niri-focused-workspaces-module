@@ -25,12 +25,14 @@ Addressed by *cffi/<name>*
 *module_path* ++
 	typeof: string ++
 	Path to the shared library, normally
-	_/usr/lib/waybar/niri-focused-workspaces.so_.
+	_/usr/local/bin/niri-focused-workspaces.so_ for a local install, or
+	_/usr/bin/niri-focused-workspaces.so_ when installed from a package.
 
 *format* ++
 	typeof: string ++
 	default: the workspace name, or its index when unnamed ++
-	How each workspace should be displayed.
+	How each workspace should be displayed. Placeholders are substituted
+	literally; unlike *niri/workspaces* there is no format spec support.
 
 *format-icons* ++
 	typeof: object ++
@@ -80,7 +82,7 @@ not tell a module which output its bar is on.
 ```
 "modules-left": ["cffi/workspaces"],
 "cffi/workspaces": {
-	"module_path": "/usr/lib/waybar/niri-focused-workspaces.so",
+	"module_path": "/usr/local/bin/niri-focused-workspaces.so",
 	"format": "{index}"
 }
 ```

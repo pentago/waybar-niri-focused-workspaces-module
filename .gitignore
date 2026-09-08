@@ -1,4 +1,5 @@
-build/
+target/
+man/*.5
 aur/*.pkg.tar.zst
 aur/*.tar.gz
 aur/src/

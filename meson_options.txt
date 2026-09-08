@@ -1,6 +1,0 @@
-option(
-    'man-pages',
-    type: 'feature',
-    value: 'auto',
-    description: 'Generate and install the man page (requires scdoc)',
-)

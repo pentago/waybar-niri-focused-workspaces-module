@@ -1,0 +1,21 @@
+[package]
+name = "waybar-niri-focused-workspaces"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Waybar module showing the niri workspaces of the focused output on every bar"
+repository = "https://github.com/pentago/aur-waybar-niri-focused-workspaces"
+
+[lib]
+name = "niri_focused_workspaces"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+glib-sys = "0.18"
+gobject-sys = "0.18"
+gtk-sys = "0.18"
+serde_json = "1"
+
+[profile.release]
+lto = true
+strip = true
