@@ -46,7 +46,7 @@ From source (installs to `/usr/local`, override with `PREFIX=`):
 
 ```bash
 make
-sudo make install     # /usr/local/bin/niri-focused-workspaces.so
+sudo make install     # /usr/local/bin/niri-focused-workspaces
 sudo make uninstall
 ```
 
@@ -56,13 +56,13 @@ sudo make uninstall
 {
   "modules-left": ["cffi/workspaces"],
   "cffi/workspaces": {
-    "module_path": "/usr/local/bin/niri-focused-workspaces.so",
+    "module_path": "/usr/local/bin/niri-focused-workspaces",
     "format": "{index}"
   }
 }
 ```
 
-The AUR package installs to `/usr/bin/niri-focused-workspaces.so` instead —
+The AUR package installs to `/usr/bin/niri-focused-workspaces` instead —
 pacman packages may not write to `/usr/local`.
 
 Options: `format`, `format-icons`, `disable-click`, `disable-markup` — same

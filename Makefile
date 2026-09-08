@@ -21,11 +21,11 @@ check:
 	$(CARGO) test
 
 install: all
-	install -Dm755 $(MODULE) $(DESTDIR)$(PREFIX)/bin/niri-focused-workspaces.so
+	install -Dm755 $(MODULE) $(DESTDIR)$(PREFIX)/bin/niri-focused-workspaces
 	install -Dm644 $(MANPAGE) $(DESTDIR)$(PREFIX)/share/man/man5/waybar-niri-focused-workspaces.5
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/niri-focused-workspaces.so
+	rm -f $(DESTDIR)$(PREFIX)/bin/niri-focused-workspaces
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man5/waybar-niri-focused-workspaces.5
 
 clean:

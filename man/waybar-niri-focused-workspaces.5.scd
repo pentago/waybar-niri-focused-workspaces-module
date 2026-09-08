@@ -25,8 +25,8 @@ Addressed by *cffi/<name>*
 *module_path* ++
 	typeof: string ++
 	Path to the shared library, normally
-	_/usr/local/bin/niri-focused-workspaces.so_ for a local install, or
-	_/usr/bin/niri-focused-workspaces.so_ when installed from a package.
+	_/usr/local/bin/niri-focused-workspaces_ for a local install, or
+	_/usr/bin/niri-focused-workspaces_ when installed from a package.
 
 *format* ++
 	typeof: string ++
@@ -82,7 +82,7 @@ not tell a module which output its bar is on.
 ```
 "modules-left": ["cffi/workspaces"],
 "cffi/workspaces": {
-	"module_path": "/usr/local/bin/niri-focused-workspaces.so",
+	"module_path": "/usr/local/bin/niri-focused-workspaces",
 	"format": "{index}"
 }
 ```
