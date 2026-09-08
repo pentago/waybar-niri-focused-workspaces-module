@@ -1,0 +1,33 @@
+# Maintainer: pentago <876756+pentago@users.noreply.github.com>
+
+pkgname=waybar-niri-focused-workspaces
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Waybar module showing the niri workspaces of the focused output on every bar'
+arch=('x86_64')
+url='https://github.com/pentago/aur-waybar-niri-focused-workspaces'
+license=('MIT')
+depends=(
+    'fmt'
+    'gcc-libs'
+    'glib2'
+    'glibc'
+    'gtk3'
+    'jsoncpp'
+)
+makedepends=('meson' 'scdoc')
+optdepends=('niri: the compositor this module talks to')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    arch-meson "$pkgname-$pkgver" build
+    meson compile -C build
+}
+
+package() {
+    depends+=('libfmt.so' 'libjsoncpp.so')
+
+    meson install -C build --destdir "$pkgdir"
+    install -Dm644 "$pkgname-$pkgver/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/"
+}
