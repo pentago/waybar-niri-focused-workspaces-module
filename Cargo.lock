@@ -335,7 +335,6 @@ checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
 name = "waybar-niri-focused-workspaces"
 version = "0.1.0"
 dependencies = [
- "glib-sys",
  "gobject-sys",
  "gtk-sys",
  "serde_json",

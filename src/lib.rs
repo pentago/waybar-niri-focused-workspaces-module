@@ -1,8 +1,7 @@
 mod ipc;
-mod workspaces;
 
 use std::collections::BTreeMap;
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
@@ -11,8 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde_json::Value;
-
-use workspaces::Workspaces;
 
 #[repr(C)]
 pub struct InitInfo {
@@ -50,7 +47,7 @@ struct Module {
     config: Value,
     container: *mut gtk_sys::GtkWidget,
     buttons: BTreeMap<u64, *mut gtk_sys::GtkWidget>,
-    state: Arc<Mutex<Workspaces>>,
+    workspaces: Arc<Mutex<Vec<Value>>>,
     socket: UnixStream,
 }
 
@@ -78,15 +75,21 @@ pub unsafe extern "C" fn wbcffi_init(
     set_class(container, c"module", true);
     gtk_sys::gtk_container_add((info.get_root_widget)(info.obj), container);
 
-    let state = Arc::new(Mutex::new(Workspaces::default()));
+    let workspaces = Arc::new(Mutex::new(Vec::new()));
+    let shared = Arc::clone(&workspaces);
     let notifier = Notifier {
         obj: info.obj,
         queue_update: info.queue_update,
     };
-    let shared = Arc::clone(&state);
     thread::spawn(move || {
         for event in events {
-            if shared.lock().expect("state mutex").apply(&event) {
+            if !is_workspace_event(&event) {
+                continue;
+            }
+            // Re-asking niri costs ~34us and cannot drift from the truth, which
+            // is why there is no local event-folding here.
+            if let Ok(fresh) = ipc::workspaces() {
+                *shared.lock().expect("workspaces mutex") = fresh;
                 notifier.notify();
             }
         }
@@ -96,7 +99,7 @@ pub unsafe extern "C" fn wbcffi_init(
         config: parse_config(entries, entries_len),
         container,
         buttons: BTreeMap::new(),
-        state,
+        workspaces,
         socket,
     }))
     .cast()
@@ -121,17 +124,24 @@ pub unsafe extern "C" fn wbcffi_update(instance: *mut c_void) {
         config,
         container,
         buttons,
-        state,
+        workspaces,
         ..
     } = &mut *instance.cast::<Module>();
 
     sync_orientation(*container);
 
-    let mut state = state.lock().expect("state mutex");
-    let output = Value::from(state.focused_output());
+    let workspaces = workspaces.lock().expect("workspaces mutex");
+    let Some(output) = workspaces
+        .iter()
+        .find(|ws| ws["is_focused"] == true)
+        .map(|ws| &ws["output"])
+    else {
+        return;
+    };
+    let visible: Vec<&Value> = workspaces.iter().filter(|ws| &ws["output"] == output).collect();
 
     buttons.retain(|id, button| {
-        let keep = state.all().get(id).is_some_and(|ws| ws["output"] == output);
+        let keep = visible.iter().any(|ws| ws["id"] == *id);
         if !keep {
             gtk_sys::gtk_widget_destroy(*button);
         }
@@ -139,13 +149,11 @@ pub unsafe extern "C" fn wbcffi_update(instance: *mut c_void) {
     });
 
     let clickable = config["disable-click"] != true;
-    for (id, workspace) in state.all() {
-        if workspace["output"] != output {
-            continue;
-        }
+    for workspace in visible {
+        let id = workspace["id"].as_u64().unwrap_or_default();
         let button = *buttons
-            .entry(*id)
-            .or_insert_with(|| create_button(*container, *id, clickable));
+            .entry(id)
+            .or_insert_with(|| create_button(*container, id, clickable));
 
         set_class(button, c"focused", workspace["is_focused"] == true);
         set_class(button, c"active", workspace["is_active"] == true);
@@ -163,26 +171,33 @@ pub unsafe extern "C" fn wbcffi_update(instance: *mut c_void) {
         };
         set_str(setter, label, &label_text(config, &value, workspace));
 
-        let position = workspace["idx"].as_i64().unwrap_or(1) as i32 - 1;
+        let position = workspace["idx"].as_i64().unwrap_or(1) as c_int - 1;
         gtk_sys::gtk_box_reorder_child((*container).cast(), button, position);
     }
     gtk_sys::gtk_widget_show_all(*container);
 }
 
+fn is_workspace_event(event: &Value) -> bool {
+    event
+        .as_object()
+        .and_then(|event| event.keys().next())
+        .is_some_and(|kind| kind.starts_with("Workspace"))
+}
+
 unsafe fn create_button(container: *mut gtk_sys::GtkWidget, id: u64, clickable: bool) -> *mut gtk_sys::GtkWidget {
     let button = gtk_sys::gtk_button_new_with_label(c"".as_ptr());
     gtk_sys::gtk_button_set_relief(button.cast(), gtk_sys::GTK_RELIEF_NONE);
-    gtk_sys::gtk_box_pack_start(container.cast(), button, glib_sys::GFALSE, glib_sys::GFALSE, 0);
+    gtk_sys::gtk_box_pack_start(container.cast(), button, 0, 0, 0);
 
     if clickable {
         gobject_sys::g_signal_connect_data(
             button.cast(),
             c"pressed".as_ptr(),
             Some(mem::transmute::<
-                unsafe extern "C" fn(*mut gtk_sys::GtkButton, glib_sys::gpointer),
+                unsafe extern "C" fn(*mut gtk_sys::GtkButton, *mut c_void),
                 unsafe extern "C" fn(),
             >(on_pressed)),
-            id as usize as glib_sys::gpointer,
+            id as usize as *mut c_void,
             None,
             0,
         );
@@ -190,7 +205,7 @@ unsafe fn create_button(container: *mut gtk_sys::GtkWidget, id: u64, clickable: 
     button
 }
 
-unsafe extern "C" fn on_pressed(_: *mut gtk_sys::GtkButton, data: glib_sys::gpointer) {
+unsafe extern "C" fn on_pressed(_: *mut gtk_sys::GtkButton, data: *mut c_void) {
     if let Err(error) = ipc::focus_workspace(data as usize as u64) {
         warn(format_args!("cannot switch workspace: {error}"));
     }
@@ -205,8 +220,7 @@ unsafe fn sync_orientation(container: *mut gtk_sys::GtkWidget) {
     }
     let parent = gtk_sys::gtk_widget_get_parent(root);
     if parent.is_null()
-        || gobject_sys::g_type_check_instance_is_a(parent.cast(), gtk_sys::gtk_orientable_get_type())
-            == glib_sys::GFALSE
+        || gobject_sys::g_type_check_instance_is_a(parent.cast(), gtk_sys::gtk_orientable_get_type()) == 0
     {
         return;
     }
@@ -261,9 +275,6 @@ fn label_text(config: &Value, value: &str, workspace: &Value) -> String {
 
 fn icon(config: &Value, value: &str, workspace: &Value) -> String {
     let icons = &config["format-icons"];
-    if !icons.is_object() {
-        return value.to_owned();
-    }
     let pick = |key: &str| icons.get(key).and_then(Value::as_str).map(str::to_owned);
 
     let by_state = [
@@ -272,16 +283,11 @@ fn icon(config: &Value, value: &str, workspace: &Value) -> String {
         ("focused", workspace["is_focused"] == true),
         ("active", workspace["is_active"] == true),
     ];
-    for (key, active) in by_state {
-        if active {
-            if let Some(icon) = pick(key) {
-                return icon;
-            }
-        }
-    }
-    workspace["name"]
-        .as_str()
-        .and_then(pick)
+    by_state
+        .into_iter()
+        .filter(|(_, active)| *active)
+        .find_map(|(key, _)| pick(key))
+        .or_else(|| workspace["name"].as_str().and_then(pick))
         .or_else(|| pick(&workspace["idx"].to_string()))
         .or_else(|| pick("default"))
         .unwrap_or_else(|| value.to_owned())
@@ -289,4 +295,62 @@ fn icon(config: &Value, value: &str, workspace: &Value) -> String {
 
 fn warn(message: std::fmt::Arguments) {
     eprintln!("niri-focused-workspaces: {message}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn workspace() -> Value {
+        json!({"id": 3, "idx": 2, "name": "dev", "output": "DP-2",
+               "is_urgent": false, "is_active": true, "is_focused": false,
+               "active_window_id": 15})
+    }
+
+    #[test]
+    fn format_substitutes_every_placeholder() {
+        let config = json!({"format": "{index}:{name}:{value}:{output}"});
+        assert_eq!(label_text(&config, "dev", &workspace()), "2:dev:dev:DP-2");
+    }
+
+    #[test]
+    fn without_a_format_the_bare_value_is_used() {
+        assert_eq!(label_text(&json!({}), "dev", &workspace()), "dev");
+    }
+
+    #[test]
+    fn unnamed_workspaces_fall_back_to_their_index() {
+        let mut unnamed = workspace();
+        unnamed["name"] = Value::Null;
+        assert_eq!(name(&unnamed), "2");
+    }
+
+    #[test]
+    fn icons_are_picked_by_state_before_name() {
+        let config = json!({"format-icons": {"dev": "D", "active": "A", "urgent": "U"}});
+        assert_eq!(icon(&config, "dev", &workspace()), "A");
+
+        let mut urgent = workspace();
+        urgent["is_urgent"] = true.into();
+        assert_eq!(icon(&config, "dev", &urgent), "U");
+    }
+
+    #[test]
+    fn icons_fall_back_through_name_index_then_default() {
+        let calm = json!({"is_urgent": false, "is_active": false, "is_focused": false,
+                          "active_window_id": 1, "name": "dev", "idx": 2});
+        assert_eq!(icon(&json!({"format-icons": {"dev": "D"}}), "x", &calm), "D");
+        assert_eq!(icon(&json!({"format-icons": {"2": "I"}}), "x", &calm), "I");
+        assert_eq!(icon(&json!({"format-icons": {"default": "*"}}), "x", &calm), "*");
+        assert_eq!(icon(&json!({}), "x", &calm), "x");
+    }
+
+    #[test]
+    fn only_workspace_events_trigger_a_refetch() {
+        assert!(is_workspace_event(&json!({"WorkspaceActivated": {}})));
+        assert!(is_workspace_event(&json!({"WorkspacesChanged": {}})));
+        assert!(!is_workspace_event(&json!({"WindowsChanged": {}})));
+        assert!(!is_workspace_event(&json!({"KeyboardLayoutsChanged": {}})));
+    }
 }

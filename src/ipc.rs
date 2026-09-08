@@ -10,6 +10,16 @@ fn connect() -> io::Result<UnixStream> {
     UnixStream::connect(path)
 }
 
+/// Sends one request and returns niri's reply payload.
+fn request(request: &Value) -> io::Result<Value> {
+    let mut socket = connect()?;
+    writeln!(socket, "{request}")?;
+
+    let mut reply = String::new();
+    BufReader::new(&socket).read_line(&mut reply)?;
+    serde_json::from_str(&reply).map_err(io::Error::other)
+}
+
 /// Subscribes to niri's event stream. The returned reader yields one JSON event
 /// per line; the clone is only there so the caller can shut the socket down and
 /// unblock the reader.
@@ -25,14 +35,12 @@ pub fn event_stream() -> io::Result<(impl Iterator<Item = Value>, UnixStream)> {
     Ok((events, handle))
 }
 
-/// Asks niri to focus the workspace with the given id.
-pub fn focus_workspace(id: u64) -> io::Result<()> {
-    let request = json!({"Action": {"FocusWorkspace": {"reference": {"Id": id}}}});
+pub fn workspaces() -> io::Result<Vec<Value>> {
+    let reply = request(&json!("Workspaces"))?;
+    Ok(reply["Ok"]["Workspaces"].as_array().cloned().unwrap_or_default())
+}
 
-    let mut socket = connect()?;
-    writeln!(socket, "{request}")?;
-    // niri answers with a single result line; drain it so the request is not
-    // discarded when the socket closes.
-    BufReader::new(&socket).read_line(&mut String::new())?;
+pub fn focus_workspace(id: u64) -> io::Result<()> {
+    request(&json!({"Action": {"FocusWorkspace": {"reference": {"Id": id}}}}))?;
     Ok(())
 }
