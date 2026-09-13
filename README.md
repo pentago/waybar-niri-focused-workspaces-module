@@ -42,11 +42,11 @@ From the AUR:
 paru -S waybar-niri-focused-workspaces
 ```
 
-From source (installs to `/usr/local`, override with `PREFIX=`):
+From source (installs to `/usr/lib/waybar`, override with `PREFIX=`):
 
 ```bash
 make
-sudo make install     # /usr/local/bin/niri-focused-workspaces
+sudo make install     # /usr/lib/waybar/niri-focused-workspaces.so
 sudo make uninstall
 ```
 
@@ -56,14 +56,11 @@ sudo make uninstall
 {
   "modules-left": ["cffi/workspaces"],
   "cffi/workspaces": {
-    "module_path": "/usr/local/bin/niri-focused-workspaces",
+    "module_path": "/usr/lib/waybar/niri-focused-workspaces.so",
     "format": "{index}"
   }
 }
 ```
-
-The AUR package installs to `/usr/bin/niri-focused-workspaces` instead —
-pacman packages may not write to `/usr/local`.
 
 Options: `format`, `format-icons`, `disable-click`, `disable-markup` — same
 semantics as `niri/workspaces`, except that `format` substitutes placeholders
