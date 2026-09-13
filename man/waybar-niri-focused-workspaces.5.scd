@@ -61,8 +61,9 @@ Addressed by *cffi/<name>*
 
 # ICONS
 
-In addition to workspace name and index matching, these keys are recognised, in
-descending priority: *urgent*, *empty*, *focused*, *active*, *default*.
+State icons take precedence over name and index matching. Recognised keys, in
+descending priority: *urgent*, *empty*, *focused*, *active*, then workspace
+name, index, and finally *default*.
 
 # STYLE
 
