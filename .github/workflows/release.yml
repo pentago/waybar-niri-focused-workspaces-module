@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify Cargo.toml version matches the tag
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$version" = "${GITHUB_REF_NAME#v}" ] || {
+            echo "ERROR: Cargo.toml version ($version) does not match tag ${GITHUB_REF_NAME}"
+            exit 1
+          }
+
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Publish GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
